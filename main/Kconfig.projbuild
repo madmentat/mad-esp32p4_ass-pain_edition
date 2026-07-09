@@ -262,34 +262,6 @@ menu "Dashboard WiFi Configuration"
 
 endmenu
 
-menu "Dashboard MQTT Configuration"
-
-    config MQTT_BROKER_URI
-        string "MQTT broker URI"
-        default "mqtt://192.168.1.1"
-        help
-            Full URI of your local MQTT broker.
-            Examples:
-              mqtt://192.168.1.10        (default port 1883, no auth)
-              mqtt://192.168.1.10:1884   (custom port)
-            No username/password — broker must allow anonymous access.
-
-    config MQTT_CLIENT_ID
-        string "MQTT client ID"
-        default "esp32p4-dashboard"
-        help
-            Unique client identifier sent to the broker on connect.
-            Must be unique across all clients on your broker.
-
-    config MQTT_KEEPALIVE_SEC
-        int "MQTT keepalive interval (seconds)"
-        default 30
-        help
-            How often the client pings the broker to keep the
-            connection alive. 30 s is a safe default for a local LAN.
-
-endmenu
-
 menu "madUpdate OTA Client"
 
     config MAD_OTA_ENABLE
