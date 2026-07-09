@@ -95,8 +95,8 @@ mad-esp32p4_ass-pain_edition/
 ├── partitions_ota_16mb.csv       Таблица разделов с OTA
 ├── sdkconfig                     Текущая конфигурация
 ├── sdkconfig.defaults            Конфигурация по умолчанию для ESP32-P4
-├── setup.ps1                     Интерактивная настройка WiFi/MQTT/OTA (Windows)
-├── setup.sh                      Интерактивная настройка WiFi/MQTT/OTA (Linux/macOS)
+├── setup.ps1                     Интерактивная настройка WiFi/OTA (Windows)
+├── setup.sh                      Интерактивная настройка WiFi/OTA (Linux/macOS)
 └── README.md
 ```
 
@@ -155,7 +155,7 @@ idf.py -p COM3 build flash monitor
 
 ## Скрипт настройки (setup)
 
-Интерактивный скрипт для быстрой настройки WiFi, MQTT и OTA-SSID в `sdkconfig`:
+Интерактивный скрипт для быстрой настройки WiFi и OTA-SSID в `sdkconfig`:
 
 ```bash
 # Windows (PowerShell):
@@ -167,8 +167,7 @@ bash setup.sh
 
 Скрипт спросит:
 1. **WiFi SSID** и пароль
-2. **MQTT broker** (например `mqtt://192.168.1.10`) — можно пропустить
-3. **OTA local SSID** —SSID локальной WiFi-сети для OTA-обновлений — можно пропустить
+2. **OTA local SSID** —SSID локальной WiFi-сети для OTA-обновлений — можно пропустить
 
 Если `sdkconfig` уже содержит реальные значения (не плейсхолдеры), скрипт предложит перезаписать.
 
@@ -193,11 +192,171 @@ bash setup.sh
 
 ## OTA-обновления
 
-Менеджер обновлений (`update_manager.c`) обеспечивает:
-- Загрузку прошивки по HTTP/HTTPS
-- Запись в分区 OTA
-- Переключение на новую прошивку
-- **Без мерцания экрана** во время всей операции
+Проект использует протокол **madUpdate** — HTTP REST API для удалённого обновления прошивки ESP32-P4 и STM32-копроцессора. **Экран не моргает ни при одной операции OTA.**
+
+### Настройка сервера обновлений
+
+Параметры OTA-сервера настраиваются через `idf.py menuconfig` → **madUpdate OTA Client**:
+
+| Параметр | По умолчанию | Описание |
+|----------|-------------|----------|
+| `MAD_OTA_ENABLE` | y | Включить OTA-клиент |
+| `MAD_OTA_AUTO_CHECK` | n | Автоматически проверять обновления при старте |
+| `MAD_OTA_AUTO_INSTALL` | n | Автоматически устанавливать обновления |
+| `MAD_OTA_USE_LOCAL_SERVER` | n | Использовать локальный сервер вместо публичного |
+| `MAD_OTA_LOCAL_BASE_URL` | `http://192.168.88.17:8090` | URL локального сервера API |
+| `MAD_OTA_PUBLIC_BASE_URL` | `https://test.ard-s.ru` | URL публичного сервера API |
+| `MAD_OTA_LOCAL_FIRMWARE_BASE_URL` | `http://192.168.88.17/firmware` | Базовый URL для скачивания прошивок (локальный) |
+| `MAD_OTA_PUBLIC_FIRMWARE_BASE_URL` | `https://test.ard-s.ru` | Базовый URL для скачивания прошивок (публичный) |
+| `MAD_OTA_LOCAL_SSID` | `ARD` | SSID WiFi-сети, при подключении к которой используется локальный сервер |
+| `MAD_OTA_APP_VERSION` | `0.1.1-test` | Текущая версия прошивки ESP32-P4 |
+| `MAD_OTA_PRODUCT_ID` | `jc4880p443c_demo` | Идентификатор продукта |
+| `MAD_OTA_HW_REV` | `jc4880p443c-p4-c6-v1` | Ревизия аппаратуры |
+| `MAD_OTA_CHANNEL` | `test` | Канал обновлений (test / stable) |
+
+### Протокол обмена данными
+
+Устройство общается с сервером через 4 эндпоинта:
+
+```
+POST /api/v1/update/check     — проверка наличия обновления
+POST /api/v1/update/start     — начало обновления
+POST /api/v1/update/progress  — отчёт о прогрессе
+POST /api/v1/update/report    — отчёт о результате
+```
+
+#### 1. Check — проверка обновления
+
+Устройство отправляет POST-запрос с JSON-телом:
+
+```json
+{
+  "device_uid": "AABBCCDD11223344",
+  "product_id": "jc4880p443c_demo",
+  "hw_rev": "jc4880p443c-p4-c6-v1",
+  "channel": "test",
+  "idf_app_version": "0.1.1-test",
+  "versions": {
+    "esp32p4": "0.1.1-test",
+    "STM32F030K6T6": "4.6"
+  }
+}
+```
+
+Сервер отвечает JSON-манифестом (см. ниже) или `{"decision": "NO_UPDATE"}`.
+
+#### 2. Формат манифеста
+
+Ответ сервера содержит массив компонентов — каждый описывает доступное обновление для конкретного целевого устройства:
+
+```json
+{
+  "manifest": {
+    "product_id": "jc4880p443c_demo",
+    "hw_rev": "jc4880p443c-p4-c6-v1",
+    "release_id": 42,
+    "deployment_id": 7,
+    "bundle": {
+      "mandatory": false,
+      "allow_downgrade": false,
+      "auto_update": true,
+      "auto_rollback": true
+    },
+    "components": [
+      {
+        "target": "esp32p4",
+        "version": "0.2.0",
+        "relative_url": "/firmware/test/esp32p4_v0.2.0.bin",
+        "sha256": "a1b2c3d4e5f6...",
+        "size_bytes": 7200000,
+        "reboot_required": true,
+        "rollback_supported": true
+      },
+      {
+        "target": "STM32F030K6T6",
+        "version": "4.7",
+        "relative_url": "/firmware/test/stm32f030_v4.7.bin",
+        "sha256": "f6e5d4c3b2a1...",
+        "size_bytes": 24000,
+        "reboot_required": false,
+        "rollback_supported": false
+      }
+    ]
+  }
+}
+```
+
+Поля компонента:
+
+| Поле | Обязательно | Описание |
+|------|-------------|----------|
+| `target` | да | Целевое устройство: `esp32p4` или `STM32F030K6T6` |
+| `version` | да | Версия прошивки |
+| `relative_url` | да | Путь к файлу прошивки (относительно firmware_base_url) |
+| `sha256` | да | SHA-256 хеш файла для проверки целостности |
+| `size_bytes` | нет | Размер файла в байтах |
+| `reboot_required` | нет | Требуется ли перезагрузка после установки (default: true) |
+| `rollback_supported` | нет | Поддерживается ли откат (default: true) |
+| `mandatory` | нет | Принудительная установка |
+| `allow_downgrade` | нет | Разрешить понижение версии |
+
+#### 3. Progress — отчёт о прогрессе
+
+Во время скачивания и записи прошивки устройство периодически отправляет:
+
+```json
+{
+  "device_uid": "AABBCCDD11223344",
+  "target": "esp32p4",
+  "percent": 45,
+  "bytes_written": 3240000,
+  "bytes_total": 7200000
+}
+```
+
+#### 4. Report — отчёт о результате
+
+После завершения установки:
+
+```json
+{
+  "device_uid": "AABBCCDD11223344",
+  "target": "esp32p4",
+  "status": "success",
+  "installed_version": "0.2.0",
+  "reboot_required": true
+}
+```
+
+### Статический манифест (fallback)
+
+Если сервер недоступен, устройство может скачать манифест по фиксированному пути:
+
+```
+GET /firmware/test/manifest_p4_ota_test.json
+```
+
+Это включается через `MAD_OTA_TRY_STATIC_MANIFEST_FALLBACK=y`.
+
+### Конфигурация через menuconfig
+
+```
+idf.py menuconfig
+  └── madUpdate OTA Client
+        ├── Enable OTA (y/n)
+        ├── Auto-check on boot (y/n)
+        ├── Auto-install (y/n)
+        ├── Use local server (y/n)
+        ├── Local base URL (default: http://192.168.88.17:8090)
+        ├── Public base URL (default: https://test.ard-s.ru)
+        ├── Local firmware base URL (default: http://192.168.88.17/firmware)
+        ├── Public firmware base URL (default: https://test.ard-s.ru)
+        ├── OTA local SSID (default: ARD)
+        ├── App version (default: 0.1.1-test)
+        ├── Product ID (default: jc4880p443c_demo)
+        ├── HW revision (default: jc4880p443c-p4-c6-v1)
+        └── Channel (default: test)
+```
 
 ---
 
