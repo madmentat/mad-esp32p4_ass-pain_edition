@@ -42,6 +42,9 @@
 | Touch RST | GPIO 35 |
 | Touch INT | GPIO 3 |
 | MIPI PHY LDO | канал 3 (2500 mV) |
+| STM32 NRST | GPIO 29 |
+| STM32 SWDIO | GPIO 33 |
+| STM32 SWCLK | GPIO 31 |
 
 ---
 
@@ -156,10 +159,90 @@ idf.py -p COM3 build flash monitor
 
 ## STM32 SWD Программатор
 
-Встроенный SWD программатор (`stm32_swd_programmer.c`) позволяет:
-- Программировать STM32-копроцессор по воздуху
-- Использовать ESP32-P4 как SWD хост
-- Обновлять прошивку STM32 без физического доступа к плате
+Проект включает программный SWD-мастер (`stm32_swd_programmer.c`), реализованный на ESP32-P4 через bit-banging GPIO. Позволяет программировать встроенный STM32F030-копроцессор прямо по воздуху, без физического доступа к плате и без внешнего программатора.
+
+### Назначение GPIO для SWD
+
+| Сигнал | GPIO по умолчанию | Описание |
+|--------|-------------------|----------|
+| NRST | GPIO 29 | Reset целевого STM32 |
+| SWDIO | GPIO 33 | Данные SWD (двунаправленная линия) |
+| SWCLK | GPIO 31 | Тактирование SWD |
+
+НазначениеGPIO настраивается через `idf.py menuconfig` → **STM32F030 SWD Programmer**.
+
+### Подтяжки (pull-up / pull-down)
+
+Для стабильной работы SWD-линка **необходимы** подтяжки на целевой стороне (STM32):
+
+| Линия | Требование | Пояснение |
+|-------|------------|-----------|
+| **SWCLK** | Pull-up к VDD (4.7k — 10k) | Линия тактирования должна быть в HIGH по умолчанию. Без подтяжки ESP32-P4 может считать шум как тактовые импульсы, что ломает SWD-транзакции |
+| **SWDIO** | Pull-up к VDD (4.7k — 10k) | Линия данных в состоянии покоя должна быть HIGH (режим чтения). Без подтяжки ACK-биты будут нестабильными |
+| **NRST** | Pull-up к VDD (10k) | Reset должен быть неактивен (HIGH) во время работы SWD. Без подтяжки STM32 может случайно уйти в reset |
+
+> **Важно:**这些 подтяжки должны быть на стороне целевой платы (STM32), а не на стороне ESP32-P4. Большинство отладочных板 (ST-Link, J-Link) имеют встроенные подтяжки — при программировании через наш SWD-мастер их нужно обеспечить самостоятельно.
+
+### Как это работает
+
+Программатор реализует полный стек CMSIS-DAP через bit-banging:
+
+1. **SWD line reset** — последовательность 50+ тактов с SWDIO=LOW сбивает состояние SWD
+2. **DP IDCODE read** — чтение идентификатора debug port ( Cortex-M0: `0x0BC11477` )
+3. **Debug port power-up** — запрос CTRL/STAT с битом `CSYSPWRUPREQ` и `CDBGPWRUPREQ`
+4. **AP ID read** — чтение MEM-AP IDR для определения типа доступа к памяти
+5. **Flash programming** — unlock → page erase → half-word program → verify → SYSRESETREQ
+
+Протокол соответствует спецификации **ARM Debug Interface Architecture Specification (ADIv5.2)**:
+
+- [ARM ADIv5.2 Specification (ARM IHI 0031)](https://developer.arm.com/documentation/ihi0031/latest/)
+- [ARM Cortex-M0 Technical Reference Manual](https://developer.arm.com/documentation/ddi0419/latest/)
+- [ARM SWD (Serial Wire Debug) Protocol](https://developer.arm.com/documentation/ddi0314/h/Serial-Wire-Debug--SWD--interface)
+
+### Конфигурация через menuconfig
+
+```
+idf.py menuconfig
+  └── STM32F030 SWD Programmer
+        ├── Enable software SWD programmer for STM32F030 (y/n)
+        ├── STM32 NRST GPIO (default: 29)
+        ├── STM32 SWDIO GPIO (default: 33)
+        ├── STM32 SWCLK GPIO (default: 31)
+        ├── SWD bit half-period delay, us (default: 2)
+        └── SWD probe task CPU core (default: 0)
+```
+
+---
+
+## Интеграция с EEZ Studio
+
+Проект совместим с [EEZ Studio](https://eez-studio.com/) — визуальным редактором LVGL-интерфейсов. Весь MMI-интерфейс (экраны, стили, изображения, виджеты) генерируется EEZ Studio и размещается в папке `main/src/ui/`.
+
+### Импорт UI из EEZ Studio проекта
+
+1. Откройте ваш проект в EEZ Studio
+2. Экспортируйте LVGL-проект (File → Export → LVGL)
+3. Скопируйте папку `src/` из экспортированного проекта в `main/` этого репозитория, заменив существующую:
+
+```bash
+# Из папки экспорта EEZ Studio:
+cp -r ./exported_project/src/ ./main/src/
+```
+
+4. Пересоберите проект:
+
+```bash
+idf.py build
+```
+
+Порт EEZ UI (`eez_ui_port.c`, `eez_ui_runtime.c`) обеспечивает совместимость между сгенерированным EEZ кодом и средой выполнения ESP-IDF. Файлы `main/src/ui/` содержат:
+- `ui.c / ui.h` — инициализация UI, создание экранов
+- `screens.c / screens.h` — определения экранов
+- `styles.c / styles.h` — стили виджетов
+- `images.c / images.h` — LVGL-обёртки над изображениями
+- `ui_image_*.c` — массивы данных изображений (закодированные в C)
+
+> **Совет:** При импорте нового UI из EEZ Studio убедитесь, что версия LVGL в EEZ Studio совпадает с версией в проекте (^9.0.0). Несовместимости между LVGL 8.x и 9.x сломают сборку.
 
 ---
 
