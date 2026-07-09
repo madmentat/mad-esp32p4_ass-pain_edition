@@ -1,0 +1,18 @@
+## IDF Component Manager Manifest File
+version: "1.0.0"
+description: "JC4880P443C - ST7701 480x800 MIPI-DSI Display Module"
+url: "https://github.com/yourusername/ESP32P4-JC4880P443C"
+
+dependencies:
+  espressif/esp_lcd_st7701: "^2.0.2"
+  # Note: All other dependencies (esp_ldo, driver, esp_lcd_mipi_dsi) are part of IDF core
+  
+tags:
+  - display
+  - st7701
+  - mipi-dsi
+  - lvgl
+  - jc4880p443c
+  
+targets:
+  - esp32p4

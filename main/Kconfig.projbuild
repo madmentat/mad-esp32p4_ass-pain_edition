@@ -1,0 +1,609 @@
+menu "Dashboard WiFi Configuration"
+
+    choice DASHBOARD_WIFI_BACKEND
+        prompt "Dashboard WiFi backend"
+        default DASHBOARD_WIFI_BACKEND_ESP32C6_HOSTED
+        help
+            ESP32-P4 has no built-in WiFi radio.  Use display-only mode while
+            tuning display/LVGL code.  Enable ESP32-C6 Hosted only after the
+            external co-processor firmware and SDIO pins are configured.
+
+        config DASHBOARD_WIFI_BACKEND_DISABLED
+            bool "Disabled / display-only safe mode"
+            help
+                No WiFi components are linked.  The dashboard boots reliably
+                and the WiFi status LED remains red.
+
+        config DASHBOARD_WIFI_BACKEND_ESP32C6_AT
+            bool "ESP32-C6 via UART AT firmware"
+            depends on IDF_TARGET_ESP32P4
+            help
+                Talk to the external ESP32-C6 over UART using ESP-AT commands.
+                This is the safest experimental backend for boards where the
+                C6 UART0 pins are exposed but SDIO/ESP-Hosted wiring is unknown.
+                It does not give ESP32-P4 a native lwIP interface; it only lets
+                the dashboard probe/connect the C6 and show WiFi status.
+
+        config DASHBOARD_WIFI_BACKEND_ESP32C6_SERVICE
+            bool "ESP32-C6 UART service/probe mode"
+            depends on IDF_TARGET_ESP32P4
+            help
+                Diagnostic mode for proving the P4<->C6 UART/control wiring.
+                It does not connect WiFi. It can probe ESP-AT in normal boot,
+                reset the C6 into the ROM UART download bootloader using
+                C6_IO9 + C6_CHIP_PU, and send esptool-compatible SYNC packets.
+                The UI still boots first; failures only turn the status LED red.
+
+        config DASHBOARD_WIFI_BACKEND_ESP32C6_HOSTED
+            bool "ESP32-C6 via ESP-Hosted / esp_wifi_remote (experimental SDIO)"
+            depends on IDF_TARGET_ESP32P4
+            help
+                Use the external ESP32-C6 co-processor through ESP-Hosted.
+                This pulls esp_wifi_remote and esp_hosted into the build and
+                uses the normal esp_wifi STA API on the host side.  Keep this
+                disabled on JC4880P443 unless the P4<->C6 SDIO wiring and C6
+                slave firmware are confirmed.
+    endchoice
+
+    config DASHBOARD_C6_AT_UART_NUM
+        int "ESP32-C6 AT UART port"
+        depends on DASHBOARD_WIFI_BACKEND_ESP32C6_AT || DASHBOARD_WIFI_BACKEND_ESP32C6_SERVICE
+        default 1
+        range 0 2
+        help
+            UART controller on ESP32-P4 used to talk to ESP32-C6 AT firmware.
+
+    config DASHBOARD_C6_AT_BAUD
+        int "ESP32-C6 AT UART baud rate"
+        depends on DASHBOARD_WIFI_BACKEND_ESP32C6_AT || DASHBOARD_WIFI_BACKEND_ESP32C6_SERVICE
+        default 115200
+        range 9600 3000000
+        help
+            ESP-AT default UART speed is commonly 115200 baud.
+
+    config DASHBOARD_C6_AT_TX_GPIO
+        int "ESP32-P4 TX GPIO -> ESP32-C6 U0RXD"
+        depends on DASHBOARD_WIFI_BACKEND_ESP32C6_AT || DASHBOARD_WIFI_BACKEND_ESP32C6_SERVICE
+        default -1
+        range -1 54
+        help
+            ESP32-P4 GPIO used as UART TX, connected to C6_U0RXD.
+            Leave -1 until the schematic/pinout is confirmed.
+
+    config DASHBOARD_C6_AT_RX_GPIO
+        int "ESP32-P4 RX GPIO <- ESP32-C6 U0TXD"
+        depends on DASHBOARD_WIFI_BACKEND_ESP32C6_AT || DASHBOARD_WIFI_BACKEND_ESP32C6_SERVICE
+        default -1
+        range -1 54
+        help
+            ESP32-P4 GPIO used as UART RX, connected to C6_U0TXD.
+            Leave -1 until the schematic/pinout is confirmed.
+
+    config DASHBOARD_C6_AT_CHIP_PU_GPIO
+        int "Optional ESP32-C6 CHIP_PU GPIO"
+        depends on DASHBOARD_WIFI_BACKEND_ESP32C6_AT || DASHBOARD_WIFI_BACKEND_ESP32C6_SERVICE
+        default -1
+        range -1 54
+        help
+            Optional ESP32-P4 GPIO controlling C6_CHIP_PU / reset enable.
+            Set to -1 if this line is not controlled by P4.
+
+    config DASHBOARD_C6_AT_BOOT_GPIO
+        int "Optional ESP32-C6 boot GPIO"
+        depends on DASHBOARD_WIFI_BACKEND_ESP32C6_AT || DASHBOARD_WIFI_BACKEND_ESP32C6_SERVICE
+        default -1
+        range -1 54
+        help
+            Optional GPIO controlling ESP32-C6 boot strap, such as C6_IO9/IO2.
+            For normal AT boot this line is kept high. Set -1 if unused.
+
+    config DASHBOARD_C6_SERVICE_PROBE_AT
+        bool "C6 service: probe normal ESP-AT boot"
+        depends on DASHBOARD_WIFI_BACKEND_ESP32C6_SERVICE
+        default n
+        help
+            Reset the ESP32-C6 for normal boot and send AT/ATE0/AT+GMR.
+            This proves that UART TX/RX and optional CHIP_PU are usable.
+
+    config DASHBOARD_C6_SERVICE_PROBE_BOOTLOADER
+        bool "C6 service: probe ROM UART bootloader"
+        depends on DASHBOARD_WIFI_BACKEND_ESP32C6_SERVICE
+        default y
+        help
+            Hold C6_IO9 low while resetting C6_CHIP_PU, then send the same
+            SYNC packet family used by esptool. This proves that P4 can put
+            the C6 into download mode and talk to the ROM loader.
+
+    config DASHBOARD_C6_SERVICE_RETURN_TO_APP
+        bool "C6 service: return C6 to normal boot after bootloader probe"
+        depends on DASHBOARD_WIFI_BACKEND_ESP32C6_SERVICE
+        default n
+        help
+            After the ROM bootloader probe, release C6_IO9 high and reset
+            C6_CHIP_PU so the C6 can boot its normal application again.
+
+    config DASHBOARD_C6_SERVICE_SYNC_RETRIES
+        int "C6 service: ROM SYNC retry count"
+        depends on DASHBOARD_WIFI_BACKEND_ESP32C6_SERVICE
+        default 8
+        range 1 50
+
+    config ESP_WIFI_SSID
+        string "Fallback WiFi SSID"
+        default "www.madmentat.ru"
+        help
+            Extra fallback SSID appended after the built-in home/office/service
+            profile list compiled into wifi_manager_esp32c6_hosted.c.
+
+    config ESP_WIFI_PASSWORD
+        string "Fallback WiFi Password"
+        default "Rctybz82#"
+        help
+            Password for the extra fallback SSID. Built-in lab/demo profiles
+            are tried first, then this menuconfig fallback profile.
+
+    config ESP_MAXIMUM_RETRY
+        int "Maximum retry count"
+        default 5
+        range 0 50
+        help
+            How many times to retry before giving up and showing red status.
+
+    config DASHBOARD_WIFI_CONNECT_TIMEOUT_MS
+        int "WiFi blocking start timeout (ms)"
+        default 25000
+        range 1000 300000
+        help
+            wifi_manager_start() waits at most this long for connected/failed.
+            Async start never blocks the UI task.
+
+    config DASHBOARD_WIFI_START_DELAY_MS
+        int "Hosted WiFi async start delay (ms)"
+        depends on DASHBOARD_WIFI_BACKEND_ESP32C6_HOSTED
+        default 2000
+        range 0 60000
+        help
+            Delay ESP-Hosted/esp_wifi_remote initialisation after the UI has
+            been created. This avoids racing heavy LVGL/MIPI framebuffer setup
+            with SDIO hosted buffers. The confirmed C6 path should start after
+            the screen is alive, not before app_main or during display init.
+
+    config DASHBOARD_WIFI_SCAN_BEFORE_CONNECT
+        bool "Hosted WiFi: scan and log APs before connecting"
+        depends on DASHBOARD_WIFI_BACKEND_ESP32C6_HOSTED
+        default y
+        help
+            Run a blocking STA scan before the first connection attempt and log
+            a short AP list. This is useful while proving the ESP32-C6 hosted
+            backend: if the scan works but connect fails, SDIO/remote WiFi is
+            alive and only SSID/password/auth need attention.
+
+    config DASHBOARD_WIFI_COUNTRY_CODE
+        string "Hosted WiFi country code for field tests"
+        depends on DASHBOARD_WIFI_BACKEND_ESP32C6_HOSTED
+        default "RU"
+        help
+            Two-letter WiFi regulatory domain used before scan/connect.  The
+            lab default intentionally enables European/Russian 2.4 GHz hotspot
+            channels when combined with nchan=13.
+
+    config DASHBOARD_WIFI_COUNTRY_NCHAN
+        int "Hosted WiFi 2.4 GHz channel count"
+        depends on DASHBOARD_WIFI_BACKEND_ESP32C6_HOSTED
+        default 13
+        range 1 14
+        help
+            Number of 2.4 GHz channels to scan from channel 1.  Use 13 for
+            Android/Samsung hotspots that may pick channel 12 or 13.
+
+    config DASHBOARD_WIFI_TASK_STACK_SIZE
+        int "WiFi manager task stack size"
+        default 5120
+        range 3072 16384
+        help
+            Stack for the small dashboard WiFi manager wrapper task.
+
+    config DASHBOARD_WIFI_TASK_PRIORITY
+        int "WiFi manager task priority"
+        default 4
+        range 1 22
+
+    config DASHBOARD_WIFI_DISABLE_POWER_SAVE
+        bool "Disable WiFi power save"
+        default y
+        help
+            Usually gives more predictable latency with remote/hosted WiFi.
+
+    choice ESP_WIFI_SAE_MODE
+        prompt "WPA3 SAE mode selection"
+        default ESP_STATION_EXAMPLE_WPA3_SAE_PWE_BOTH
+        help
+            Select mode for SAE as Hunt and Peck, H2E or both.
+        config ESP_STATION_EXAMPLE_WPA3_SAE_PWE_HUNT_AND_PECK
+            bool "HUNT AND PECK"
+        config ESP_STATION_EXAMPLE_WPA3_SAE_PWE_HASH_TO_ELEMENT
+            bool "H2E"
+            depends on ESP_WIFI_ENABLE_SAE_H2E
+        config ESP_STATION_EXAMPLE_WPA3_SAE_PWE_BOTH
+            bool "BOTH"
+            depends on ESP_WIFI_ENABLE_SAE_H2E
+    endchoice
+
+    config ESP_WIFI_PW_ID
+        string "PASSWORD IDENTIFIER"
+        depends on ESP_STATION_EXAMPLE_WPA3_SAE_PWE_HASH_TO_ELEMENT || \
+                   ESP_STATION_EXAMPLE_WPA3_SAE_PWE_BOTH
+        default ""
+        help
+            Password identifier for SAE H2E.
+
+    choice ESP_WIFI_SCAN_AUTH_MODE_THRESHOLD
+        prompt "WiFi scan auth mode threshold"
+        default ESP_WIFI_AUTH_WPA2_PSK
+        help
+            Weakest auth mode to accept during scan.
+        config ESP_WIFI_AUTH_OPEN
+            bool "OPEN"
+        config ESP_WIFI_AUTH_WEP
+            bool "WEP"
+        config ESP_WIFI_AUTH_WPA_PSK
+            bool "WPA PSK"
+        config ESP_WIFI_AUTH_WPA2_PSK
+            bool "WPA2 PSK"
+        config ESP_WIFI_AUTH_WPA_WPA2_PSK
+            bool "WPA/WPA2 PSK"
+        config ESP_WIFI_AUTH_WPA3_PSK
+            bool "WPA3 PSK"
+        config ESP_WIFI_AUTH_WPA2_WPA3_PSK
+            bool "WPA2/WPA3 PSK"
+        config ESP_WIFI_AUTH_WAPI_PSK
+            bool "WAPI PSK"
+    endchoice
+
+endmenu
+
+menu "Dashboard MQTT Configuration"
+
+    config MQTT_BROKER_URI
+        string "MQTT broker URI"
+        default "mqtt://192.168.1.1"
+        help
+            Full URI of your local MQTT broker.
+            Examples:
+              mqtt://192.168.1.10        (default port 1883, no auth)
+              mqtt://192.168.1.10:1884   (custom port)
+            No username/password — broker must allow anonymous access.
+
+    config MQTT_CLIENT_ID
+        string "MQTT client ID"
+        default "esp32p4-dashboard"
+        help
+            Unique client identifier sent to the broker on connect.
+            Must be unique across all clients on your broker.
+
+    config MQTT_KEEPALIVE_SEC
+        int "MQTT keepalive interval (seconds)"
+        default 30
+        help
+            How often the client pings the broker to keep the
+            connection alive. 30 s is a safe default for a local LAN.
+
+endmenu
+
+menu "madUpdate OTA Client"
+
+    config MAD_OTA_ENABLE
+        bool "Enable madUpdate OTA client"
+        depends on IDF_TARGET_ESP32P4
+        default y
+        help
+            Enable the P4 self-update client. This only checks/downloads after
+            WiFi is connected. It requires an OTA partition table with otadata,
+            ota_0 and ota_1 to actually install firmware.
+
+    config MAD_OTA_AUTO_CHECK
+        bool "Automatically check for P4 OTA update after WiFi connect"
+        depends on MAD_OTA_ENABLE
+        default y
+        help
+            Start an OTA check task after WiFi connects. With auto-install off,
+            this only logs whether an update is available.
+
+    config MAD_OTA_AUTO_INSTALL
+        bool "Automatically install available P4 OTA update"
+        depends on MAD_OTA_ENABLE
+        default n
+        help
+            Dangerous for early tests. When enabled, any manifest component for
+            the ESP32-P4 target with a different version is downloaded, checked
+            by SHA256, written to the inactive OTA slot and booted.
+
+    config MAD_OTA_APP_VERSION
+        string "Current P4 application version reported to update server"
+        depends on MAD_OTA_ENABLE
+        default "0.1.1-test"
+        help
+            The updater compares this value with the manifest component version.
+            Bump it for every firmware image that will be served by madUpdate.
+
+    config MAD_OTA_PRODUCT_ID
+        string "madUpdate product_id"
+        depends on MAD_OTA_ENABLE
+        default "jc4880p443c_demo"
+
+    config MAD_OTA_HW_REV
+        string "madUpdate hardware revision"
+        depends on MAD_OTA_ENABLE
+        default "jc4880p443c-p4-c6-v1"
+
+    config MAD_OTA_CHANNEL
+        string "madUpdate release channel"
+        depends on MAD_OTA_ENABLE
+        default "test"
+
+    config MAD_OTA_TARGET_ID
+        string "madUpdate target id for this P4 app"
+        depends on MAD_OTA_ENABLE
+        default "esp32p4"
+
+    config MAD_OTA_USE_LOCAL_SERVER
+        bool "Use local madUpdateServer when connected to local SSID"
+        depends on MAD_OTA_ENABLE
+        default n
+        help
+            Disabled by default. When disabled, OTA always uses the public base URL
+            even on the ARD SSID. Enable only if a local updater service is really
+            running and exposes the same /api/v1/* contract.
+
+    config MAD_OTA_LOCAL_SSID
+        string "SSID that selects local update server"
+        depends on MAD_OTA_ENABLE
+        default "ARD"
+        help
+            Used only when MAD_OTA_USE_LOCAL_SERVER is enabled.
+
+    config MAD_OTA_LOCAL_BASE_URL
+        string "Local madUpdateServer API base URL"
+        depends on MAD_OTA_ENABLE
+        default "https://test.ard-s.ru"
+        help
+            Base URL for the update API when connected to CONFIG_MAD_OTA_LOCAL_SSID.
+            This points directly to madUpdateServer/Drogon in the ARD LAN.
+
+    config MAD_OTA_PUBLIC_BASE_URL
+        string "Public madUpdateServer API base URL"
+        depends on MAD_OTA_ENABLE
+        default "https://test.ard-s.ru"
+        help
+            Base URL for the update API when not on the local ARD SSID.
+            The reverse proxy should expose /api/v1/* here.
+
+    config MAD_OTA_LOCAL_FIRMWARE_BASE_URL
+        string "Local firmware download base URL"
+        depends on MAD_OTA_ENABLE
+        default "https://test.ard-s.ru"
+        help
+            Base URL used to resolve manifest relative_url/download_path values on the local ARD network.
+
+    config MAD_OTA_PUBLIC_FIRMWARE_BASE_URL
+        string "Public firmware download base URL"
+        depends on MAD_OTA_ENABLE
+        default "https://test.ard-s.ru"
+        help
+            Base URL used to resolve manifest relative_url/download_path values outside the local ARD network.
+
+    config MAD_OTA_CHECK_PATH
+        string "Update check API path"
+        depends on MAD_OTA_ENABLE
+        default "/api/v1/update/check"
+
+    config MAD_OTA_STATIC_MANIFEST_PATH
+        string "Static manifest fallback path"
+        depends on MAD_OTA_ENABLE
+        default "/test/jc4880p443c_demo/esp32p4_app/manifest_p4_ota_test.json"
+        help
+            Used only when the API server is unavailable. Resolved against the firmware base URL.
+
+    config MAD_OTA_START_PATH
+        string "Update start report API path"
+        depends on MAD_OTA_ENABLE
+        default "/api/v1/update/start"
+
+    config MAD_OTA_PROGRESS_PATH
+        string "Update progress report API path"
+        depends on MAD_OTA_ENABLE
+        default "/api/v1/update/progress"
+
+    config MAD_OTA_REPORT_PATH
+        string "Update final report API path"
+        depends on MAD_OTA_ENABLE
+        default "/api/v1/update/report"
+
+    config MAD_OTA_TRY_STATIC_MANIFEST_FALLBACK
+        bool "Try static manifest if update/check API fails"
+        depends on MAD_OTA_ENABLE
+        default n
+
+    config MAD_OTA_STM32_TARGET_ID
+        string "STM32 firmware component target id"
+        depends on MAD_OTA_ENABLE
+        default "STM32F030K6T6"
+
+    config MAD_OTA_STM32_CURRENT_VERSION
+        string "Current STM32 firmware version reported to update server"
+        depends on MAD_OTA_ENABLE
+        default "4.6"
+        help
+            Sent in versions.STM32F030K6T6. This must match the server target_id
+            contract; T5L1 is intentionally not reported by this P4+C6+STM32 build.
+
+    config MAD_OTA_STM32_FLASH_BASE
+        hex "STM32 firmware flash base address"
+        depends on MAD_OTA_ENABLE
+        default 0x08000000
+
+    config MAD_OTA_STM32_MAX_IMAGE_BYTES
+        int "Maximum STM32 firmware image size"
+        depends on MAD_OTA_ENABLE
+        default 32768
+        range 1024 32768
+
+    config MAD_OTA_STM32_FLASH_ATTEMPTS
+        int "STM32 SWD full-image flash attempts"
+        depends on MAD_OTA_ENABLE
+        default 5
+        range 1 10
+        help
+            Number of full STM32 programming cycles to try after the firmware
+            image has already been downloaded and verified by SHA256. This does
+            not re-download the image and does not retry individual SWD packets;
+            each attempt is a complete connect/erase/program/verify/reset cycle.
+
+    config MAD_OTA_STM32_FLASH_RETRY_DELAY_MS
+        int "Delay before retrying STM32 SWD full-image flash, ms"
+        depends on MAD_OTA_ENABLE
+        default 1000
+        range 0 10000
+
+    config MAD_OTA_HTTP_TIMEOUT_MS
+        int "OTA HTTP timeout in ms"
+        depends on MAD_OTA_ENABLE
+        default 20000
+        range 1000 300000
+
+    config MAD_OTA_WAIT_WIFI_TIMEOUT_MS
+        int "OTA wait-for-WiFi timeout in ms"
+        depends on MAD_OTA_ENABLE
+        default 60000
+        range 1000 600000
+
+    config MAD_OTA_TASK_STACK_SIZE
+        int "OTA task stack size"
+        depends on MAD_OTA_ENABLE
+        default 8192
+        range 6144 32768
+
+    config MAD_OTA_TASK_PRIORITY
+        int "OTA task priority"
+        depends on MAD_OTA_ENABLE
+        default 2
+        range 1 22
+        help
+            Keep below the LVGL task priority so flash writes do not starve the display task.
+
+    config MAD_OTA_TASK_CORE
+        int "OTA task CPU core"
+        depends on MAD_OTA_ENABLE
+        default 0
+        range 0 1
+        help
+            Pin OTA download/write task away from the LVGL task, which is pinned to core 1 in this demo.
+
+    config MAD_OTA_DOWNLOAD_CHUNK_BYTES
+        int "OTA download/write chunk size"
+        depends on MAD_OTA_ENABLE
+        default 512
+        range 256 4096
+        help
+            Smaller chunks reduce long flash-write stalls at the cost of a longer update.
+            For ESP32-P4 self-OTA this project additionally caps the effective
+            chunk size to a display-safe value at runtime, so old sdkconfig
+            values such as 2048 do not reintroduce screen flicker.
+
+    config MAD_OTA_WRITE_THROTTLE_MS
+        int "Delay after each OTA write chunk, ms"
+        depends on MAD_OTA_ENABLE
+        default 30
+        range 0 250
+        help
+            Delay inserted after every OTA write chunk. Higher values slow down
+            the update but give LVGL, TCP/IP and LCD DMA more time slices.
+            For ESP32-P4 self-OTA this project enforces a conservative minimum
+            at runtime to reduce visible blinking/underflow.
+
+    config MAD_OTA_REPORT_STEP_PERCENT
+        int "Server-side progress report step, percent"
+        depends on MAD_OTA_ENABLE
+        default 25
+        range 5 100
+        help
+            Reduces extra HTTPS POST handshakes during the firmware download. UI progress is still updated every chunk.
+
+endmenu
+
+menu "STM32F030 SWD Programmer"
+
+    config STM32_SWD_ENABLE
+        bool "Enable software SWD programmer for STM32F030"
+        depends on IDF_TARGET_ESP32P4
+        default y
+        help
+            Enables the bit-banged SWD master on ESP32-P4 GPIOs. Stage 1
+            validates the hardware link by reading DP IDCODE, CPUID and
+            STM32F0 DBGMCU_IDCODE. Flash erase/write will be added after
+            SWD signal integrity is confirmed on the real board.
+
+    config STM32_SWD_NRST_GPIO
+        int "STM32 NRST GPIO"
+        depends on STM32_SWD_ENABLE
+        default 29
+        range 0 54
+
+    config STM32_SWD_SWDIO_GPIO
+        int "STM32 SWDIO GPIO"
+        depends on STM32_SWD_ENABLE
+        default 33
+        range 0 54
+
+    config STM32_SWD_SWCLK_GPIO
+        int "STM32 SWCLK GPIO"
+        depends on STM32_SWD_ENABLE
+        default 31
+        range 0 54
+
+    config STM32_SWD_BIT_DELAY_US
+        int "SWD bit half-period delay, us"
+        depends on STM32_SWD_ENABLE
+        default 2
+        range 0 50
+        help
+            Default fast SWD half-period delay. The programmer may temporarily
+            retry at a slower 10 us delay when DP/AP connection is unstable.
+
+
+    config STM32_SWD_SCOPE_TEST_ENABLE
+        bool "Run slow SWD pin oscilloscope test before probe"
+        depends on STM32_SWD_ENABLE
+        default n
+        help
+            Diagnostic only. When enabled, slowly toggles only the configured
+            SWCLK and SWDIO pins before the real SWD transaction. It does not
+            touch any SWDIO candidate GPIOs.
+
+    config STM32_SWD_SCOPE_TEST_PERIOD_MS
+        int "SWD pin oscilloscope test half-period, ms"
+        depends on STM32_SWD_ENABLE && STM32_SWD_SCOPE_TEST_ENABLE
+        default 100
+        range 20 1000
+
+    config STM32_SWD_TASK_STACK_SIZE
+        int "SWD probe task stack size"
+        depends on STM32_SWD_ENABLE
+        default 8192
+        range 4096 12288
+
+    config STM32_SWD_TASK_PRIORITY
+        int "SWD probe task priority"
+        depends on STM32_SWD_ENABLE
+        default 5
+        range 1 22
+
+    config STM32_SWD_TASK_CORE
+        int "SWD probe task CPU core"
+        depends on STM32_SWD_ENABLE
+        default 0
+        range 0 1
+        help
+            Keep SWD bit-banging away from the LVGL task pinned to core 1.
+
+endmenu

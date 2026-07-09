@@ -1,0 +1,201 @@
+# sdkconfig.defaults - JC4880P443C / ESP32-P4 / ST7701 / GT911
+#
+# This file is tuned for the current display-only LVGL/EEZ bring-up:
+# - ESP32-P4 target;
+# - early ESP32-P4 silicon support: rev v1.x, including rev v1.3;
+# - RGB565 / 16-bit LVGL pipeline;
+# - fast HEX PSRAM for framebuffer/fullscreen image work;
+# - no ESP-HOSTED / Wi-Fi remote options in this display-only build.
+#
+# IMPORTANT:
+# After replacing sdkconfig.defaults, delete sdkconfig and build/ so ESP-IDF
+# regenerates the real configuration from this file.
+
+# -----------------------------------------------------------------------------
+# Target
+# -----------------------------------------------------------------------------
+CONFIG_IDF_TARGET="esp32p4"
+
+# -----------------------------------------------------------------------------
+# ESP32-P4 chip revision compatibility
+# -----------------------------------------------------------------------------
+# ESP-IDF 5.5.x may default to ESP32-P4 rev v3.1+, but JC4880P443C boards
+# can contain early ESP32-P4 silicon, e.g. rev v1.3.
+# These options force the bootloader/application image to support rev >= v1.0.
+CONFIG_ESP32P4_SELECTS_REV_LESS_V3=y
+CONFIG_ESP32P4_REV_MIN_100=y
+# CONFIG_ESP32P4_REV_MIN_300 is not set
+# CONFIG_ESP32P4_REV_MIN_301 is not set
+CONFIG_ESP32P4_REV_MIN_FULL=100
+CONFIG_ESP_REV_MIN_FULL=100
+
+# Keep eFuse block minimum conservative for early boards.
+CONFIG_ESP_EFUSE_BLOCK_REV_MIN_FULL=0
+
+# -----------------------------------------------------------------------------
+# Flash
+# -----------------------------------------------------------------------------
+# DIO is safer across boards/cables/chips. Flash bandwidth is not the main
+# bottleneck for the current framebuffer tests; PSRAM bandwidth is.
+#CONFIG_ESPTOOLPY_FLASHMODE_DIO=y is not set
+CONFIG_ESPTOOLPY_FLASHMODE_QIO=y
+CONFIG_ESPTOOLPY_FLASHFREQ_80M=y
+CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
+
+# Custom partition table from project file partitions.csv.
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
+CONFIG_PARTITION_TABLE_FILENAME="partitions.csv"
+CONFIG_PARTITION_TABLE_OFFSET=0x8000
+
+# -----------------------------------------------------------------------------
+# PSRAM
+# -----------------------------------------------------------------------------
+CONFIG_SPIRAM=y
+CONFIG_SPIRAM_MODE_HEX=y
+
+# Fast PSRAM for MIPI-DPI framebuffer and fullscreen image work.
+# If a specific board becomes unstable at 250 MHz, fall back to 200 MHz.
+# CONFIG_SPIRAM_SPEED_20M is not set
+# CONFIG_SPIRAM_SPEED_80M is not set
+# CONFIG_SPIRAM_SPEED_200M is not set
+CONFIG_SPIRAM_SPEED_250M=y
+
+# Do not reserve 1/8 of PSRAM for ECC during display experiments.
+# CONFIG_SPIRAM_ECC_ENABLE is not set
+
+# Keep code/rodata XIP from PSRAM disabled for now. Moving flash content into
+# PSRAM can increase load on the same PSRAM bus used by LCD framebuffers.
+# CONFIG_SPIRAM_XIP_FROM_PSRAM is not set
+# CONFIG_SPIRAM_FETCH_INSTRUCTIONS is not set
+# CONFIG_SPIRAM_RODATA is not set
+
+# -----------------------------------------------------------------------------
+# FreeRTOS / timing
+# -----------------------------------------------------------------------------
+CONFIG_FREERTOS_HZ=1000
+
+# -----------------------------------------------------------------------------
+# Compiler
+# -----------------------------------------------------------------------------
+# Speed optimization for UI/rendering tests.
+CONFIG_COMPILER_OPTIMIZATION_PERF=y
+# CONFIG_COMPILER_OPTIMIZATION_DEBUG is not set
+# CONFIG_COMPILER_OPTIMIZATION_SIZE is not set
+
+# -----------------------------------------------------------------------------
+# Flash chip support
+# -----------------------------------------------------------------------------
+# CONFIG_SPI_FLASH_SUPPORT_GD_CHIP is not set
+CONFIG_SPI_FLASH_SUPPORT_BOYA_CHIP=y
+
+# -----------------------------------------------------------------------------
+# LVGL: RGB565 / 16-bit color
+# -----------------------------------------------------------------------------
+# Critical for this display path:
+# 480x800 RGB565 frame      = 768000 bytes
+# 480x800 RGB888 frame      = 1152000 bytes
+# 480x800 ARGB8888 frame    = 1536000 bytes
+#
+# Keep LVGL and LCD panel pipeline in 16-bit color while tuning performance.
+# CONFIG_LV_COLOR_DEPTH_1 is not set
+# CONFIG_LV_COLOR_DEPTH_8 is not set
+CONFIG_LV_COLOR_DEPTH_16=y
+# CONFIG_LV_COLOR_DEPTH_16_SWAP is not set
+# CONFIG_LV_COLOR_DEPTH_24 is not set
+# CONFIG_LV_COLOR_DEPTH_32 is not set
+
+# LVGL logging: keep enabled while tuning, reduce/disable later for production.
+CONFIG_LV_USE_LOG=y
+
+# LVGL fonts currently useful for EEZ/LVGL UI experiments.
+CONFIG_LV_FONT_MONTSERRAT_14=y
+CONFIG_LV_FONT_MONTSERRAT_16=y
+CONFIG_LV_FONT_MONTSERRAT_20=y
+CONFIG_LV_FONT_MONTSERRAT_28=y
+CONFIG_LV_FONT_MONTSERRAT_48=y
+
+# -----------------------------------------------------------------------------
+# ESP32-P4 / MIPI-DSI support
+# -----------------------------------------------------------------------------
+CONFIG_IDF_EXPERIMENTAL_FEATURES=y
+
+# -----------------------------------------------------------------------------
+# ESP-Hosted / Wi-Fi Remote (ESP32-C6 co-processor over SDIO)
+# -----------------------------------------------------------------------------
+# Slave target selection — must be set BEFORE esp_hosted Kconfig is processed
+CONFIG_SLAVE_IDF_TARGET_ESP32C6=y
+CONFIG_ESP_HOSTED_ENABLED=y
+CONFIG_ESP_HOSTED_P4_DEV_BOARD_NONE=y
+# CONFIG_ESP_HOSTED_P4_DEV_BOARD_FUNC_BOARD is not set
+CONFIG_ESP_HOSTED_PRIV_SDIO_OPTION=y
+CONFIG_ESP_HOSTED_PRIV_SPI_HD_OPTION=y
+# CONFIG_ESP_HOSTED_SPI_HOST_INTERFACE is not set
+CONFIG_ESP_HOSTED_SDIO_HOST_INTERFACE=y
+# CONFIG_ESP_HOSTED_SPI_HD_HOST_INTERFACE is not set
+# CONFIG_ESP_HOSTED_UART_HOST_INTERFACE is not set
+CONFIG_ESP_HOSTED_IDF_SLAVE_TARGET="esp32c6"
+CONFIG_ESP_HOSTED_SDIO_RESET_ACTIVE_HIGH=y
+# CONFIG_ESP_HOSTED_SDIO_RESET_ACTIVE_LOW is not set
+CONFIG_ESP_HOSTED_SDIO_OPTIMIZATION_RX_STREAMING_MODE=y
+# CONFIG_ESP_HOSTED_SDIO_SLOT_0 is not set
+CONFIG_ESP_HOSTED_SDIO_SLOT_1=y
+CONFIG_ESP_HOSTED_SDIO_SLOT=1
+# CONFIG_ESP_HOSTED_SD_PWR_CTRL_LDO_INTERNAL_IO is not set
+CONFIG_ESP_HOSTED_SDIO_4_BIT_BUS=y
+# CONFIG_ESP_HOSTED_SDIO_1_BIT_BUS is not set
+CONFIG_ESP_HOSTED_SDIO_BUS_WIDTH=4
+CONFIG_ESP_HOSTED_SDIO_CLOCK_FREQ_KHZ=10000
+CONFIG_ESP_HOSTED_SDIO_CMD_GPIO_RANGE_MIN=0
+CONFIG_ESP_HOSTED_SDIO_CMD_GPIO_RANGE_MAX=100
+CONFIG_ESP_HOSTED_SDIO_CLK_GPIO_RANGE_MIN=0
+CONFIG_ESP_HOSTED_SDIO_CLK_GPIO_RANGE_MAX=100
+CONFIG_ESP_HOSTED_SDIO_D0_GPIO_RANGE_MIN=0
+CONFIG_ESP_HOSTED_SDIO_D0_GPIO_RANGE_MAX=100
+CONFIG_ESP_HOSTED_SDIO_D1_GPIO_RANGE_MIN=0
+CONFIG_ESP_HOSTED_SDIO_D1_GPIO_RANGE_MAX=100
+CONFIG_ESP_HOSTED_SDIO_D2_GPIO_RANGE_MIN=0
+CONFIG_ESP_HOSTED_SDIO_D2_GPIO_RANGE_MAX=100
+CONFIG_ESP_HOSTED_SDIO_D3_GPIO_RANGE_MIN=0
+CONFIG_ESP_HOSTED_SDIO_D3_GPIO_RANGE_MAX=100
+CONFIG_ESP_HOSTED_SDIO_RESET_SLAVE_GPIO_MIN=0
+CONFIG_ESP_HOSTED_SDIO_RESET_SLAVE_GPIO_MAX=100
+CONFIG_ESP_HOSTED_PRIV_SDIO_PIN_CMD_SLOT_1=19
+CONFIG_ESP_HOSTED_PRIV_SDIO_PIN_CLK_SLOT_1=18
+CONFIG_ESP_HOSTED_PRIV_SDIO_PIN_D0_SLOT_1=14
+CONFIG_ESP_HOSTED_PRIV_SDIO_PIN_D1_4BIT_BUS_SLOT_1=15
+CONFIG_ESP_HOSTED_PRIV_SDIO_PIN_D2_4BIT_BUS_SLOT_1=16
+CONFIG_ESP_HOSTED_PRIV_SDIO_PIN_D3_4BIT_BUS_SLOT_1=17
+CONFIG_ESP_HOSTED_SDIO_GPIO_RESET_SLAVE=54
+CONFIG_ESP_HOSTED_SDIO_PIN_CMD=19
+CONFIG_ESP_HOSTED_SDIO_PIN_CLK=18
+CONFIG_ESP_HOSTED_SDIO_PIN_D0=14
+CONFIG_ESP_HOSTED_SDIO_PRIV_PIN_D1_4BIT_BUS=15
+CONFIG_ESP_HOSTED_SDIO_PIN_D2=16
+CONFIG_ESP_HOSTED_SDIO_PIN_D3=17
+CONFIG_ESP_HOSTED_SDIO_PIN_D1=15
+CONFIG_ESP_HOSTED_SDIO_TX_Q_SIZE=20
+CONFIG_ESP_HOSTED_SDIO_RX_Q_SIZE=20
+CONFIG_ESP_HOSTED_SDIO_RESET_DELAY_MS=1500
+# CONFIG_ESP_HOSTED_SDIO_CHECKSUM is not set
+CONFIG_ESP_HOSTED_SLAVE_RESET_ON_EVERY_HOST_BOOTUP=y
+# CONFIG_ESP_HOSTED_SLAVE_RESET_ONLY_IF_NECESSARY is not set
+CONFIG_ESP_HOSTED_GPIO_SLAVE_RESET_SLAVE=54
+CONFIG_ESP_HOSTED_RPC_TASK_STACK=4096
+CONFIG_ESP_HOSTED_DFLT_TASK_STACK=3072
+# CONFIG_ESP_HOSTED_ENABLE_ITWT is not set
+# CONFIG_ESP_HOSTED_ENABLE_DPP is not set
+CONFIG_ESP_HOSTED_USE_MEMPOOL=y
+CONFIG_ESP_HOSTED_MAX_SIMULTANEOUS_SYNC_RPC_REQUESTS=5
+CONFIG_ESP_HOSTED_MAX_SIMULTANEOUS_ASYNC_RPC_REQUESTS=5
+CONFIG_ESP_HOSTED_CLI_ENABLED=y
+# CONFIG_ESP_HOSTED_CLI_NEW_INSTANCE is not set
+# CONFIG_ESP_HOSTED_FW_VERSION_MISMATCH_WARNING_SUPPRESS is not set
+# CONFIG_ESP_HOSTED_RAW_THROUGHPUT_TRANSPORT is not set
+# CONFIG_ESP_HOSTED_PKT_STATS is not set
+CONFIG_ESP_HOSTED_HOST_TO_ESP_WIFI_DATA_THROTTLE=y
+CONFIG_ESP_HOSTED_PRIV_WIFI_TX_SDIO_HIGH_THRESHOLD=80
+CONFIG_ESP_HOSTED_TO_WIFI_DATA_THROTTLE_HIGH_THRESHOLD=80
+CONFIG_ESP_HOSTED_TO_WIFI_DATA_THROTTLE_LOW_THRESHOLD=60
+# CONFIG_ESP_HOSTED_DECODE_WIFI_RESERVED_FIELD is not set
+# CONFIG_ESP_HOSTED_HOST_POWER_SAVE_ENABLED is not set

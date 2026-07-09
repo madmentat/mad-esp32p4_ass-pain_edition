@@ -1,0 +1,20 @@
+dependencies:
+  idf:
+    version: ^5.5.4
+  lvgl/lvgl: ^9.5.0
+  espressif/esp_lcd_st7701: ^2.0.2
+  espressif/esp_lcd_touch: ^1.1.0
+  espressif/esp_lcd_touch_gt911: ^1.1.0
+
+  # ESP32-P4 has no native Wi-Fi radio. JC4880P443C uses the on-board
+  # ESP32-C6 as Wi-Fi co-processor over SDIO.
+  #
+  # esp_wifi_remote 0.15.3 provides correct injected headers for IDF 5.5
+  # (including gtk_rekey_interval in wifi_ap_config_t) and uses eppp_link
+  # (not wifi_remote_over_eppp), so Kconfig ordering works correctly.
+  #
+  # esp_hosted 2.7.0 is pinned because this version is known to boot on the
+  # current P4+C6 hardware. Newer versions (2.7.4+) crashed during
+  # xTaskCreateStaticPinnedToCore while starting ESP-Hosted static tasks.
+  espressif/esp_wifi_remote: "0.15.3"
+  espressif/esp_hosted: "2.7.0"

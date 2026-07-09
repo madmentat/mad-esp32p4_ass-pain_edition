@@ -1,0 +1,8 @@
+# ESP32-P4 16 MB flash OTA layout for JC4880P443C demo panel
+# Keep ota_0/ota_1 large enough for the graphics-heavy LVGL/EEZ app.
+# Name,    Type, SubType, Offset,   Size,     Flags
+nvs,       data, nvs,     0x9000,   0x6000,
+otadata,   data, ota,     0xf000,   0x2000,
+phy_init,  data, phy,     0x11000,  0x1000,
+ota_0,     app,  ota_0,   0x20000,  0x7E0000,
+ota_1,     app,  ota_1,   0x800000, 0x7E0000,
