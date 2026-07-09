@@ -1,39 +1,39 @@
 # mad-esp32p4_ass-pain_edition
 
-Рабочий шаблон для ESP32-P4 + JC4880P443C с OTA-обновлением и встроенным STM32 SWD программатором.
+Working template for ESP32-P4 + JC4880P443C with OTA firmware updates and a built-in STM32 SWD programmer.
 
-Прошивка для ESP32-P4, превращающая модуль JC4880P443C (480x800 MIPI-DSI, ST7701, GT911 тачскрин) в полноценную IoT-платформу с MMI-интерфейсом на фоновых изображениях, удалённым обновлением прошивки и программированием встроенного STM32-копроцессора прямо по воздуху. **Экран не моргает ни при одной операции OTA.**
-
----
-
-## Возможности
-
-- **OTA-обновления** — прошивка обновляется без мерцания экрана
-- **STM32 SWD программатор** — программирование STM32-копроцессора по воздуху
-- **EEZ LVGL UI** — MMI-интерфейс с фоновыми изображениями
-- **MIPI-DSI дисплей** — ST7701, 480x800, 2 линии данных
-- **Capacitive touch** — GT911 через I2C
-- **WiFi** — через ESP32-C6 копроцессор (ESP-Hosted)
-- **Несколько бэкендов WiFi** — AT-команды, Service, Hosted (SDIO)
+Firmware for ESP32-P4 that turns the JC4880P443C display module (480x800 MIPI-DSI, ST7701, GT911 capacitive touch) into a full IoT platform with an MMI interface backed by background images, over-the-air firmware updates, and in-system programming of the onboard STM32 co-processor. **The screen never blinks during any OTA operation.**
 
 ---
 
-## Аппаратная часть
+## Features
 
-| Параметр | Значение |
-|----------|----------|
+- **OTA updates** — firmware updates without screen flickering
+- **STM32 SWD programmer** — program the STM32 co-processor wirelessly
+- **EEZ LVGL UI** — MMI interface with background images
+- **MIPI-DSI display** — ST7701, 480x800, 2 data lanes
+- **Capacitive touch** — GT911 via I2C
+- **WiFi** — via ESP32-C6 co-processor (ESP-Hosted)
+- **Multiple WiFi backends** — AT commands, Service, Hosted (SDIO)
+
+---
+
+## Hardware
+
+| Parameter | Value |
+|-----------|-------|
 | MCU | ESP32-P4 |
-| Дисплейный модуль | JC4880P443C (AliExpress) |
-| Контроллер дисплея | ST7701 |
-| Разрешение | 480 × 800 (портрет) |
-| Интерфейс дисплея | MIPI-DSI, 2 линии данных |
-| Тачскрин | GT911, capacitive, I2C |
+| Display module | JC4880P443C (AliExpress) |
+| Display controller | ST7701 |
+| Resolution | 480 × 800 portrait |
+| Display interface | MIPI-DSI, 2 data lanes |
+| Touch controller | GT911 capacitive, I2C |
 | Flash | 16 MB |
-| PSRAM | Требуется (SPIRAM) |
+| PSRAM | Required (SPIRAM) |
 
-### Назначение пинов
+### Pin Assignments
 
-| Сигнал | GPIO |
+| Signal | GPIO |
 |--------|------|
 | LCD reset | GPIO 5 |
 | Backlight PWM | GPIO 23 |
@@ -41,52 +41,52 @@
 | Touch SCL | GPIO 8 |
 | Touch RST | GPIO 35 |
 | Touch INT | GPIO 3 |
-| MIPI PHY LDO | канал 3 (2500 mV) |
+| MIPI PHY LDO | channel 3 (2500 mV) |
 
 ---
 
-## Структура проекта
+## Project Structure
 
 ```
 mad-esp32p4_ass-pain_edition/
 ├── components/
-│   └── jc4880p443c/              Последовательность инициализации ST7701
-│       ├── jc4880p443c.c         Инициализационные команды (39 команд)
-│       ├── jc4880p443c.h         Публичный API
+│   └── jc4880p443c/              ST7701 init sequence + timing constants
+│       ├── jc4880p443c.c         Validated init commands (39 commands)
+│       ├── jc4880p443c.h         Public API
 │       └── idf_component.yml
 ├── main/
-│   ├── jc4880p443c_demo.c        Точка входа: дисплей, тач, LVGL, app_main
-│   ├── stm32_swd_programmer.c    SWD программатор STM32
-│   ├── update/update_manager.c   Менеджер OTA-обновлений
-│   ├── eez_ui_port.c             Порт EEZ LVGL UI
-│   ├── eez_ui_runtime.c          Рантайм EEZ UI
-│   ├── ui_background_direct.c    Фоновые изображения
-│   ├── display_direct_timing.c   Тайминги дисплея
-│   ├── display_experiments.c     Эксперименты с дисплеем
-│   ├── wifi_manager*.c           WiFi бэкенды (AT/Service/Hosted/Stub)
-│   ├── src/ui/                   EEZ UI файлы (изображения, стили, экраны)
-│   ├── Kconfig.projbuild         Конфигурация WiFi/OTA через menuconfig
+│   ├── jc4880p443c_demo.c        Entry point: display, touch, LVGL, app_main
+│   ├── stm32_swd_programmer.c    SWD programmer for STM32
+│   ├── update/update_manager.c   OTA update manager
+│   ├── eez_ui_port.c             EEZ LVGL UI port
+│   ├── eez_ui_runtime.c          EEZ UI runtime
+│   ├── ui_background_direct.c    Background image rendering
+│   ├── display_direct_timing.c   Display timing parameters
+│   ├── display_experiments.c     Display experiments
+│   ├── wifi_manager*.c           WiFi backends (AT/Service/Hosted/Stub)
+│   ├── src/ui/                   EEZ UI files (images, styles, screens)
+│   ├── Kconfig.projbuild         WiFi/OTA config via menuconfig
 │   ├── CMakeLists.txt
 │   └── idf_component.yml
-├── partitions.csv                Таблица разделов (16 MB)
-├── partitions_ota_16mb.csv       Таблица разделов с OTA
-├── sdkconfig                     Текущая конфигурация
-├── sdkconfig.defaults            Конфигурация по умолчанию для ESP32-P4
-├── deploy.ps1 / deploy.sh       Скрипты деплоя
-└── setup.ps1 / setup.sh         Скрипты настройки
+├── partitions.csv                Partition table (16 MB)
+├── partitions_ota_16mb.csv       Partition table with OTA
+├── sdkconfig                     Current configuration
+├── sdkconfig.defaults            Default configuration for ESP32-P4
+├── deploy.ps1 / deploy.sh       Deploy scripts
+└── setup.ps1 / setup.sh         Setup scripts
 ```
 
 ---
 
-## Требования
+## Requirements
 
-- **ESP-IDF 5.5.x** — проект использует API `i2c_master` из IDF 5.x
-- **Python 3.8+** (для IDF tools)
+- **ESP-IDF 5.5.x** — uses the `i2c_master` driver API from IDF 5.x
+- **Python 3.8+** (for IDF tools)
 
-Автоматически подтягиваются IDF Component Manager:
+Auto-fetched by IDF Component Manager:
 
-| Компонент | Версия |
-|-----------|--------|
+| Component | Version |
+|-----------|---------|
 | `lvgl/lvgl` | ^9.0.0 |
 | `espressif/esp_lcd_st7701` | ^2.0.2 |
 | `espressif/esp_lcd_touch` | ^1.1.0 |
@@ -94,34 +94,34 @@ mad-esp32p4_ass-pain_edition/
 | `espressif/esp_wifi_remote` | >=0.10,<2.0 |
 | `espressif/esp_hosted` | ~2 |
 
-> **О WiFi:** ESP32-P4 не имеет встроенного WiFi. Используется внешний копроцессор ESP32-C6 через `esp_wifi_remote` и `esp_hosted`.
+> **Note on WiFi:** The ESP32-P4 has no built-in WiFi. It uses an external ESP32-C6 co-processor via `esp_wifi_remote` and `esp_hosted`.
 
 ---
 
-## Быстрый старт
+## Quick Start
 
-### 1. Клонирование
+### 1. Clone
 
 ```bash
 git clone https://github.com/madmentat/mad-esp32p4_ass-pain_edition.git
 cd mad-esp32p4_ass-pain_edition
 ```
 
-### 2. Выбор цели
+### 2. Set target
 
 ```bash
 idf.py set-target esp32p4
 ```
 
-### 3. Конфигурация
+### 3. Configure
 
 ```bash
 idf.py menuconfig
 ```
 
-Настройте WiFi и бэкенд подключения.
+Set up WiFi and connection backend.
 
-### 4. Сборка и прошивка
+### 4. Build and flash
 
 ```bash
 idf.py -p COM3 build flash monitor
@@ -129,40 +129,40 @@ idf.py -p COM3 build flash monitor
 
 ---
 
-## Бэкенды WiFi
+## WiFi Backends
 
-Проект поддерживает несколько способов подключения ESP32-C6:
+The project supports multiple ways to connect the ESP32-C6:
 
-| Бэкенд | Описание |
-|--------|----------|
-| ESP32-C6 AT | AT-команды через UART |
-| ESP32-C6 Service | Service-режим |
-| ESP32-C6 Hosted | SDIO/SPI Hosted (рекомендуется) |
-| Stub | Заглушка для тестирования без WiFi |
+| Backend | Description |
+|---------|-------------|
+| ESP32-C6 AT | AT commands via UART |
+| ESP32-C6 Service | Service mode |
+| ESP32-C6 Hosted | SDIO/SPI Hosted (recommended) |
+| Stub | Stub for testing without WiFi |
 
-Выбор через `idf.py menuconfig` → Dashboard WiFi Backend.
-
----
-
-## OTA-обновления
-
-Менеджер обновлений (`update_manager.c`) обеспечивает:
-- Загрузку прошивки по HTTP/HTTPS
-- Запись в分区 OTA
-- Переключение на новую прошивку
-- **Без мерцания экрана** во время всей операции
+Select via `idf.py menuconfig` → Dashboard WiFi Backend.
 
 ---
 
-## STM32 SWD Программатор
+## OTA Updates
 
-Встроенный SWD программатор (`stm32_swd_programmer.c`) позволяет:
-- Программировать STM32-копроцессор по воздуху
-- Использовать ESP32-P4 как SWD хост
-- Обновлять прошивку STM32 без физического доступа к плате
+The update manager (`update_manager.c`) provides:
+- HTTP/HTTPS firmware download
+- Writing to OTA partition
+- Switching to new firmware
+- **No screen flickering** during the entire operation
 
 ---
 
-## Лицензия
+## STM32 SWD Programmer
 
-MIT. Используйте как хотите.
+The built-in SWD programmer (`stm32_swd_programmer.c`) allows:
+- Programming the STM32 co-processor wirelessly
+- Using ESP32-P4 as an SWD host
+- Updating STM32 firmware without physical access to the board
+
+---
+
+## License
+
+MIT. Do whatever you like with it.
