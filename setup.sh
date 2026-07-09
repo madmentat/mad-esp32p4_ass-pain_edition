@@ -1,12 +1,11 @@
 #!/usr/bin/env bash
-# setup.sh — настраивает sdkconfig: ввод SSID и пароля
+# setup.sh — настраивает sdkconfig: WiFi, OTA сервер
 # Запуск: bash setup.sh
 #
 # После запуска:
 #   1. Введите WiFi SSID
 #   2. Введите WiFi пароль
-#   3. Введите MQTT broker (или Enter чтобы пропустить)
-#   4. Введите OTA local SSID (или Enter чтобы пропустить)
+#   3. Введите OTA local SSID (или Enter чтобы пропустить)
 
 set -euo pipefail
 
@@ -18,11 +17,11 @@ if [ ! -f "$sdkconfig" ]; then
     exit 1
 fi
 
-echo "=== WiFi & MQTT Setup ==="
+echo "=== WiFi & OTA Setup ==="
 echo ""
 
 # Проверяем placeholders
-if ! grep -q "YOUR_WIFI_SSID\|YOUR_WIFI_PASSWORD\|YOUR_MQTT_BROKER_IP\|YOUR_OTA_LOCAL_SSID" "$sdkconfig"; then
+if ! grep -q "YOUR_WIFI_SSID\|YOUR_WIFI_PASSWORD\|YOUR_OTA_LOCAL_SSID" "$sdkconfig"; then
     echo "sdkconfig already has real credentials (no placeholders found)."
     read -p "Overwrite? (y/N) " overwrite
     if [ "$overwrite" != "y" ]; then
@@ -33,7 +32,7 @@ fi
 
 # --- WiFi SSID ---
 echo ""
-echo "Step 1/4: WiFi"
+echo "Step 1/3: WiFi"
 current_ssid=$(grep -oP 'CONFIG_ESP_WIFI_SSID="\K[^"]+' "$sdkconfig" 2>/dev/null || echo "")
 if [ -n "$current_ssid" ] && [ "$current_ssid" != "YOUR_WIFI_SSID" ]; then
     echo "  Current SSID: $current_ssid"
@@ -46,7 +45,7 @@ fi
 
 # --- WiFi Password ---
 echo ""
-echo "Step 2/4: WiFi Password"
+echo "Step 2/3: WiFi Password"
 read -s -p "  WiFi Password: " password
 echo ""
 if [ -z "$password" ]; then
@@ -55,20 +54,9 @@ if [ -z "$password" ]; then
     password="$current_pass"
 fi
 
-# --- MQTT Broker ---
-echo ""
-echo "Step 3/4: MQTT Broker (optional)"
-current_mqtt=$(grep -oP 'CONFIG_MQTT_BROKER_URI="\K[^"]+' "$sdkconfig" 2>/dev/null || echo "")
-echo "  Current: $current_mqtt"
-read -p "  MQTT broker URI (mqtt://IP, or Enter to skip): " mqtt
-if [ -z "$mqtt" ]; then
-    mqtt="$current_mqtt"
-    echo "  Kept current"
-fi
-
 # --- OTA Local SSID ---
 echo ""
-echo "Step 4/4: OTA Local SSID (optional)"
+echo "Step 3/3: OTA Local SSID (optional)"
 current_ota=$(grep -oP 'CONFIG_MAD_OTA_LOCAL_SSID="\K[^"]+' "$sdkconfig" 2>/dev/null || echo "")
 echo "  Current: $current_ota"
 read -p "  OTA local SSID (Enter to skip): " ota_ssid
@@ -86,14 +74,12 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
     sed -i '' \
         -e "s|CONFIG_ESP_WIFI_SSID=\"[^\"]*\"|CONFIG_ESP_WIFI_SSID=\"$ssid\"|" \
         -e "s|CONFIG_ESP_WIFI_PASSWORD=\"[^\"]*\"|CONFIG_ESP_WIFI_PASSWORD=\"$password\"|" \
-        -e "s|CONFIG_MQTT_BROKER_URI=\"[^\"]*\"|CONFIG_MQTT_BROKER_URI=\"$mqtt\"|" \
         -e "s|CONFIG_MAD_OTA_LOCAL_SSID=\"[^\"]*\"|CONFIG_MAD_OTA_LOCAL_SSID=\"$ota_ssid\"|" \
         "$sdkconfig"
 else
     sed -i \
         -e "s|CONFIG_ESP_WIFI_SSID=\"[^\"]*\"|CONFIG_ESP_WIFI_SSID=\"$ssid\"|" \
         -e "s|CONFIG_ESP_WIFI_PASSWORD=\"[^\"]*\"|CONFIG_ESP_WIFI_PASSWORD=\"$password\"|" \
-        -e "s|CONFIG_MQTT_BROKER_URI=\"[^\"]*\"|CONFIG_MQTT_BROKER_URI=\"$mqtt\"|" \
         -e "s|CONFIG_MAD_OTA_LOCAL_SSID=\"[^\"]*\"|CONFIG_MAD_OTA_LOCAL_SSID=\"$ota_ssid\"|" \
         "$sdkconfig"
 fi
@@ -101,7 +87,6 @@ fi
 echo ""
 echo "=== Done ==="
 echo "  SSID:  $ssid"
-echo "  MQTT:  $mqtt"
 echo "  OTA:   $ota_ssid"
 echo ""
 echo "Run 'idf.py build flash monitor' to build and flash."
