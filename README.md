@@ -95,8 +95,8 @@ mad-esp32p4_ass-pain_edition/
 ├── partitions_ota_16mb.csv       Partition table with OTA
 ├── sdkconfig                     Current configuration
 ├── sdkconfig.defaults            Default configuration for ESP32-P4
-├── setup.ps1                     Interactive WiFi/MQTT/OTA setup (Windows)
-├── setup.sh                      Interactive WiFi/MQTT/OTA setup (Linux/macOS)
+├── setup.ps1                     Interactive WiFi/OTA setup (Windows)
+├── setup.sh                      Interactive WiFi/OTA setup (Linux/macOS)
 └── README.md
 ```
 
@@ -155,7 +155,7 @@ idf.py -p COM3 build flash monitor
 
 ## Setup Script
 
-Interactive script for quick WiFi, MQTT, and OTA SSID configuration in `sdkconfig`:
+Interactive script for quick WiFi and OTA SSID configuration in `sdkconfig`:
 
 ```bash
 # Windows (PowerShell):
@@ -167,8 +167,7 @@ bash setup.sh
 
 The script will ask for:
 1. **WiFi SSID** and password
-2. **MQTT broker** (e.g. `mqtt://192.168.1.10`) — can be skipped
-3. **OTA local SSID** — WiFi network SSID for OTA updates — can be skipped
+2. **OTA local SSID** — WiFi network SSID for OTA updates — can be skipped
 
 If `sdkconfig` already contains real values (not placeholders), the script will offer to overwrite.
 
@@ -193,11 +192,171 @@ Select via `idf.py menuconfig` → Dashboard WiFi Backend.
 
 ## OTA Updates
 
-The update manager (`update_manager.c`) provides:
-- HTTP/HTTPS firmware download
-- Writing to OTA partition
-- Switching to new firmware
-- **No screen flickering** during the entire operation
+The project uses the **madUpdate** protocol — an HTTP REST API for remote firmware updates of ESP32-P4 and the STM32 co-processor. **The screen never blinks during any OTA operation.**
+
+### Update Server Configuration
+
+OTA server parameters are configured via `idf.py menuconfig` → **madUpdate OTA Client**:
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `MAD_OTA_ENABLE` | y | Enable OTA client |
+| `MAD_OTA_AUTO_CHECK` | n | Auto-check for updates on boot |
+| `MAD_OTA_AUTO_INSTALL` | n | Auto-install updates |
+| `MAD_OTA_USE_LOCAL_SERVER` | n | Use local server instead of public |
+| `MAD_OTA_LOCAL_BASE_URL` | `http://192.168.88.17:8090` | Local API server URL |
+| `MAD_OTA_PUBLIC_BASE_URL` | `https://test.ard-s.ru` | Public API server URL |
+| `MAD_OTA_LOCAL_FIRMWARE_BASE_URL` | `http://192.168.88.17/firmware` | Firmware download base URL (local) |
+| `MAD_OTA_PUBLIC_FIRMWARE_BASE_URL` | `https://test.ard-s.ru` | Firmware download base URL (public) |
+| `MAD_OTA_LOCAL_SSID` | `ARD` | WiFi SSID that triggers local server |
+| `MAD_OTA_APP_VERSION` | `0.1.1-test` | Current ESP32-P4 firmware version |
+| `MAD_OTA_PRODUCT_ID` | `jc4880p443c_demo` | Product identifier |
+| `MAD_OTA_HW_REV` | `jc4880p443c-p4-c6-v1` | Hardware revision |
+| `MAD_OTA_CHANNEL` | `test` | Update channel (test / stable) |
+
+### Communication Protocol
+
+The device communicates with the server via 4 endpoints:
+
+```
+POST /api/v1/update/check     — check for available updates
+POST /api/v1/update/start     — begin update installation
+POST /api/v1/update/progress  — report installation progress
+POST /api/v1/update/report    — report installation result
+```
+
+#### 1. Check — update availability
+
+The device sends a POST request with JSON body:
+
+```json
+{
+  "device_uid": "AABBCCDD11223344",
+  "product_id": "jc4880p443c_demo",
+  "hw_rev": "jc4880p443c-p4-c6-v1",
+  "channel": "test",
+  "idf_app_version": "0.1.1-test",
+  "versions": {
+    "esp32p4": "0.1.1-test",
+    "STM32F030K6T6": "4.6"
+  }
+}
+```
+
+The server responds with a JSON manifest (see below) or `{"decision": "NO_UPDATE"}`.
+
+#### 2. Manifest format
+
+The server response contains an array of components — each describes an available update for a specific target device:
+
+```json
+{
+  "manifest": {
+    "product_id": "jc4880p443c_demo",
+    "hw_rev": "jc4880p443c-p4-c6-v1",
+    "release_id": 42,
+    "deployment_id": 7,
+    "bundle": {
+      "mandatory": false,
+      "allow_downgrade": false,
+      "auto_update": true,
+      "auto_rollback": true
+    },
+    "components": [
+      {
+        "target": "esp32p4",
+        "version": "0.2.0",
+        "relative_url": "/firmware/test/esp32p4_v0.2.0.bin",
+        "sha256": "a1b2c3d4e5f6...",
+        "size_bytes": 7200000,
+        "reboot_required": true,
+        "rollback_supported": true
+      },
+      {
+        "target": "STM32F030K6T6",
+        "version": "4.7",
+        "relative_url": "/firmware/test/stm32f030_v4.7.bin",
+        "sha256": "f6e5d4c3b2a1...",
+        "size_bytes": 24000,
+        "reboot_required": false,
+        "rollback_supported": false
+      }
+    ]
+  }
+}
+```
+
+Component fields:
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `target` | yes | Target device: `esp32p4` or `STM32F030K6T6` |
+| `version` | yes | Firmware version |
+| `relative_url` | yes | Path to firmware file (relative to firmware_base_url) |
+| `sha256` | yes | SHA-256 hash for integrity verification |
+| `size_bytes` | no | File size in bytes |
+| `reboot_required` | no | Reboot needed after install (default: true) |
+| `rollback_supported` | no | Rollback supported (default: true) |
+| `mandatory` | no | Force installation |
+| `allow_downgrade` | no | Allow version downgrade |
+
+#### 3. Progress — installation progress
+
+During firmware download and write, the device periodically sends:
+
+```json
+{
+  "device_uid": "AABBCCDD11223344",
+  "target": "esp32p4",
+  "percent": 45,
+  "bytes_written": 3240000,
+  "bytes_total": 7200000
+}
+```
+
+#### 4. Report — installation result
+
+After installation completes:
+
+```json
+{
+  "device_uid": "AABBCCDD11223344",
+  "target": "esp32p4",
+  "status": "success",
+  "installed_version": "0.2.0",
+  "reboot_required": true
+}
+```
+
+### Static Manifest (fallback)
+
+If the server is unavailable, the device can download a manifest from a fixed path:
+
+```
+GET /firmware/test/manifest_p4_ota_test.json
+```
+
+Enable via `MAD_OTA_TRY_STATIC_MANIFEST_FALLBACK=y`.
+
+### Configuration via menuconfig
+
+```
+idf.py menuconfig
+  └── madUpdate OTA Client
+        ├── Enable OTA (y/n)
+        ├── Auto-check on boot (y/n)
+        ├── Auto-install (y/n)
+        ├── Use local server (y/n)
+        ├── Local base URL (default: http://192.168.88.17:8090)
+        ├── Public base URL (default: https://test.ard-s.ru)
+        ├── Local firmware base URL (default: http://192.168.88.17/firmware)
+        ├── Public firmware base URL (default: https://test.ard-s.ru)
+        ├── OTA local SSID (default: ARD)
+        ├── App version (default: 0.1.1-test)
+        ├── Product ID (default: jc4880p443c_demo)
+        ├── HW revision (default: jc4880p443c-p4-c6-v1)
+        └── Channel (default: test)
+```
 
 ---
 
