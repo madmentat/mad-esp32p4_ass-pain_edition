@@ -106,14 +106,14 @@ mad-esp32p4_ass-pain_edition/
 
 ## Requirements
 
-- **ESP-IDF 5.5.x** — uses the `i2c_master` driver API from IDF 5.x
+- **ESP-IDF 5.5.4** — uses the `i2c_master` driver API from IDF 5.x
 - **Python 3.8+** (for IDF tools)
 
 Auto-fetched by IDF Component Manager:
 
 | Component | Version |
 |-----------|---------|
-| `lvgl/lvgl` | ^9.0.0 |
+| `lvgl/lvgl` | ^9.5.0 |
 | `espressif/esp_lcd_st7701` | ^2.0.2 |
 | `espressif/esp_lcd_touch` | ^1.1.0 |
 | `espressif/esp_lcd_touch_gt911` | ^1.1.0 |
@@ -425,29 +425,29 @@ This project is compatible with [EEZ Studio](https://eez-studio.com/) — a visu
 
 ### Importing a UI from EEZ Studio
 
-1. Open your project in EEZ Studio
-2. Export the LVGL project (File → Export → LVGL)
-3. Copy the `src/` folder from the exported project into `main/` of this repository, replacing the existing one:
+1. Create a new **eez+lvgl** project in EEZ Studio (select `lvgl ^9.5.0` when prompted)
+2. Build the project in EEZ Studio (Build → Build)
+3. Copy the `src/` folder from the EEZ Studio project into `main/` of this repository, replacing the existing one:
 
 ```bash
-# From the EEZ Studio export directory:
-cp -r ./exported_project/src/ ./main/src/
+# From the EEZ Studio project directory:
+cp -r ./your_eez_project/src/ ./main/src/
 ```
 
-4. Rebuild the project:
+4. Rebuild the ESP-IDF project:
 
 ```bash
 idf.py build
 ```
 
-The EEZ UI port (`eez_ui_port.c`, `eez_ui_runtime.c`) provides compatibility between the EEZ-generated code and the ESP-IDF runtime. The `main/src/ui/` files contain:
+During the build process, EEZ Studio automatically generates image arrays (`ui_image_*.c`), styles, screens, and all other required UI code. The EEZ UI port (`eez_ui_port.c`, `eez_ui_runtime.c`) provides compatibility between the EEZ-generated code and the ESP-IDF runtime. The `main/src/ui/` files contain:
 - `ui.c / ui.h` — UI initialization, screen creation
 - `screens.c / screens.h` — screen definitions
 - `styles.c / styles.h` — widget styles
 - `images.c / images.h` — LVGL image wrappers
 - `ui_image_*.c` — image data arrays (encoded as C)
 
-> **Tip:** When importing a new UI from EEZ Studio, make sure the LVGL version in EEZ Studio matches the project version (^9.0.0). LVGL 8.x vs 9.x incompatibilities will break the build.
+> **Important:** The LVGL version in the EEZ Studio project must match the project version (`^9.5.0`). LVGL 8.x vs 9.x incompatibilities will break the build.
 
 ---
 
