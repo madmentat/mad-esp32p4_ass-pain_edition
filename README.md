@@ -1,5 +1,7 @@
 # mad-esp32p4_ass-pain_edition
 
+Author: [madmentat.ru](https://madmentat.ru)
+
 Working template for ESP32-P4 + JC4880P443C with OTA firmware updates and a built-in STM32 SWD programmer.
 
 Firmware for ESP32-P4 that turns the JC4880P443C display module (480x800 MIPI-DSI, ST7701, GT911 capacitive touch) into a full IoT platform with an MMI interface backed by background images, over-the-air firmware updates, and in-system programming of the onboard STM32 co-processor. **The screen never blinks during any OTA operation.**
@@ -93,8 +95,9 @@ mad-esp32p4_ass-pain_edition/
 ├── partitions_ota_16mb.csv       Partition table with OTA
 ├── sdkconfig                     Current configuration
 ├── sdkconfig.defaults            Default configuration for ESP32-P4
-├── deploy.ps1 / deploy.sh       Deploy scripts
-└── setup.ps1 / setup.sh         Setup scripts
+├── setup.ps1                     Interactive WiFi/MQTT/OTA setup (Windows)
+├── setup.sh                      Interactive WiFi/MQTT/OTA setup (Linux/macOS)
+└── README.md
 ```
 
 ---
@@ -147,6 +150,29 @@ Set up WiFi and connection backend.
 ```bash
 idf.py -p COM3 build flash monitor
 ```
+
+---
+
+## Setup Script
+
+Interactive script for quick WiFi, MQTT, and OTA SSID configuration in `sdkconfig`:
+
+```bash
+# Windows (PowerShell):
+powershell -ExecutionPolicy Bypass -File setup.ps1
+
+# Linux / macOS:
+bash setup.sh
+```
+
+The script will ask for:
+1. **WiFi SSID** and password
+2. **MQTT broker** (e.g. `mqtt://192.168.1.10`) — can be skipped
+3. **OTA local SSID** — WiFi network SSID for OTA updates — can be skipped
+
+If `sdkconfig` already contains real values (not placeholders), the script will offer to overwrite.
+
+> **Note:** `setup.sh` requires GNU grep (`grep -oP`). It does not work out of the box on macOS — install GNU grep via `brew install grep`.
 
 ---
 
