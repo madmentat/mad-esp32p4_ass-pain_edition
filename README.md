@@ -1,5 +1,7 @@
 # mad-esp32p4_ass-pain_edition
 
+Автор проекта: [madmentat.ru](https://madmentat.ru)
+
 Рабочий шаблон для ESP32-P4 + JC4880P443C с OTA-обновлением и встроенным STM32 SWD программатором.
 
 Прошивка для ESP32-P4, превращающая модуль JC4880P443C (480x800 MIPI-DSI, ST7701, GT911 тачскрин) в полноценную IoT-платформу с MMI-интерфейсом на фоновых изображениях, удалённым обновлением прошивки и программированием встроенного STM32-копроцессора прямо по воздуху. **Экран не моргает ни при одной операции OTA.**
@@ -93,8 +95,9 @@ mad-esp32p4_ass-pain_edition/
 ├── partitions_ota_16mb.csv       Таблица разделов с OTA
 ├── sdkconfig                     Текущая конфигурация
 ├── sdkconfig.defaults            Конфигурация по умолчанию для ESP32-P4
-├── deploy.ps1 / deploy.sh       Скрипты деплоя
-└── setup.ps1 / setup.sh         Скрипты настройки
+├── setup.ps1                     Интерактивная настройка WiFi/MQTT/OTA (Windows)
+├── setup.sh                      Интерактивная настройка WiFi/MQTT/OTA (Linux/macOS)
+└── README.md
 ```
 
 ---
@@ -147,6 +150,29 @@ idf.py menuconfig
 ```bash
 idf.py -p COM3 build flash monitor
 ```
+
+---
+
+## Скрипт настройки (setup)
+
+Интерактивный скрипт для быстрой настройки WiFi, MQTT и OTA-SSID в `sdkconfig`:
+
+```bash
+# Windows (PowerShell):
+powershell -ExecutionPolicy Bypass -File setup.ps1
+
+# Linux / macOS:
+bash setup.sh
+```
+
+Скрипт спросит:
+1. **WiFi SSID** и пароль
+2. **MQTT broker** (например `mqtt://192.168.1.10`) — можно пропустить
+3. **OTA local SSID** —SSID локальной WiFi-сети для OTA-обновлений — можно пропустить
+
+Если `sdkconfig` уже содержит реальные значения (не плейсхолдеры), скрипт предложит перезаписать.
+
+> **Примечание:** `setup.sh` требует GNU grep (`grep -oP`). На macOS из коробки не работает — установите `grep` через `brew install grep`.
 
 ---
 
