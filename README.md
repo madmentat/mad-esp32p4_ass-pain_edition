@@ -33,18 +33,36 @@ Firmware for ESP32-P4 that turns the JC4880P443C display module (480x800 MIPI-DS
 
 ### Pin Assignments
 
-| Signal | GPIO |
-|--------|------|
-| LCD reset | GPIO 5 |
-| Backlight PWM | GPIO 23 |
-| Touch SDA | GPIO 7 |
-| Touch SCL | GPIO 8 |
-| Touch RST | GPIO 35 |
-| Touch INT | GPIO 3 |
-| MIPI PHY LDO | channel 3 (2500 mV) |
-| STM32 NRST | GPIO 29 |
-| STM32 SWDIO | GPIO 33 |
-| STM32 SWCLK | GPIO 31 |
+#### Display (MIPI-DSI + backlight)
+
+| Signal | GPIO | Purpose |
+|--------|------|---------|
+| LCD reset | 5 | Resets the ST7701 controller during init |
+| Backlight PWM | 23 | Controls display backlight brightness via PWM |
+| MIPI PHY LDO | channel 3, 2500 mV | Powers the MIPI-DSI PHY layer (internal ESP32-P4 LDO, not a GPIO) |
+
+> MIPI-DSI data (DPI-clk, D0–D3, CKE, CS, DE, HSYNC, VSYNC) goes through the ESP32-P4 internal bus — no separate GPIO assignment is needed.
+
+#### Touchscreen (GT911, I2C)
+
+| Signal | GPIO | Purpose |
+|--------|------|---------|
+| Touch SDA | 7 | I2C data line (bidirectional) |
+| Touch SCL | 8 | I2C clock line |
+| Touch RST | 22 | Hardware reset for GT911 (active LOW) |
+| Touch INT | 21 | Touch interrupt from GT911 (fires on touch event) |
+
+> GT911 I2C address depends on INT state at reset: INT LOW → `0x5D` (default), INT HIGH → `0x14`.
+
+#### STM32 SWD Programmer
+
+| Signal | GPIO | Purpose |
+|--------|------|---------|
+| SWCLK | 31 | SWD clock (pull-up to VDD 4.7–10k required) |
+| SWDIO | 33 | SWD data (bidirectional, pull-up to VDD 4.7–10k required) |
+| NRST | 29 | Target STM32 reset (pull-up to VDD 10k required) |
+
+> All three lines require pull-ups on the target board (STM32 side). Without them, SWD transactions will be unstable.
 
 ---
 
