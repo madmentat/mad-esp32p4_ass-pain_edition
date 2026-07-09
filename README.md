@@ -6,6 +6,8 @@ Working template for ESP32-P4 + JC4880P443C with OTA firmware updates and a buil
 
 Firmware for ESP32-P4 that turns the JC4880P443C display module (480x800 MIPI-DSI, ST7701, GT911 capacitive touch) into a full IoT platform with an MMI interface backed by background images, over-the-air firmware updates, and in-system programming of the onboard STM32 co-processor. **The screen never blinks during any OTA operation.**
 
+![JC4880P443C — ESP32-P4 + MIPI-DSI display in action](images/madESP32P4_1.jpg)
+
 ---
 
 ## Features
